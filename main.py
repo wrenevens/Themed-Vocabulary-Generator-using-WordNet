@@ -3,92 +3,98 @@ from nltk.corpus import wordnet as wn
 from nltk.corpus import stopwords
 import json
 
+# Download required corpora
 nltk.download('wordnet')
 nltk.download('stopwords')
 
-seeds = ["job", "education", "entertainment"]
-depth = 2
-stop_words = set(stopwords.words('english'))
+SEEDS = ["job", "education", "entertainment"]
+MAX_DEPTH = 2
+STOP_WORDS = set(stopwords.words('english'))
 
-def removeSpecialsLower(token: str) -> str:
+def clean_lowercase(token: str) -> str:
+    """Remove non-lowercase letters and convert to lowercase."""
     token = token.lower()
     return "".join(c for c in token if c.islower())
 
-def extractTokens(word):
+def extract_definition_tokens(word: str) -> list[str]:
+    """Extract tokens from all WordNet definitions of a word."""
     tokens = []
     for syn in wn.synsets(word):
         tokens.extend(syn.definition().split())
     return tokens
 
-def recursive(related: list, tokens, depthCount=0, visited=None):
+def build_related_words(related_words: list, tokens: list, depth_count=0, visited=None):
+    """Recursively build related words from tokens."""
     if visited is None:
         visited = set()
-    if depthCount == depth:
+    if depth_count == MAX_DEPTH:
         return
     for token in tokens:
-        token = removeSpecialsLower(token)
-        if not token or token in stop_words or token in visited:
+        token = clean_lowercase(token)
+        if not token or token in STOP_WORDS or token in visited:
             continue
         visited.add(token)
-        extractedTokens = extractTokens(token)
-        if extractedTokens:
-            related.append({"word": token, "depth": depthCount})
-            recursive(related, extractedTokens, depthCount + 1, visited)
+        token_tokens = extract_definition_tokens(token)
+        if token_tokens:
+            related_words.append({"word": token, "depth": depth_count})
+            build_related_words(related_words, token_tokens, depth_count + 1, visited)
 
 def main():
-    result = []
-    for seed in seeds:
-        seedRelated = []
-        tokens = extractTokens(seed)
-        visited = set()
-        visited.add(seed)
-        recursive(seedRelated, tokens, visited=visited)  # pass fresh visited per seed
-        result.append({"seed": seed, "related": seedRelated})
+    vocabulary_result = []
 
+    # Generate related words for each seed
+    for seed in SEEDS:
+        seed_related_words = []
+        seed_tokens = extract_definition_tokens(seed)
+        visited_tokens = set()
+        visited_tokens.add(seed)
+        build_related_words(seed_related_words, seed_tokens, visited=visited_tokens)
+        vocabulary_result.append({"seed": seed, "related": seed_related_words})
+
+    # Save result to JSON
     with open("result.json", "w") as file:
-        json.dump(result, file, indent=4, sort_keys=True)
+        json.dump(vocabulary_result, file, indent=4, sort_keys=True)
 
     print("Vocabulary generation complete! Output saved to result.json")
 
-    currentSeed = seeds[0]
-    isRunning = True
-    while isRunning:
-        print(f'currentSeed = "{currentSeed}"')
-        userInput = input("1. Set seed, 2. View related, 3. Check related 4. exit: ")
-        match userInput:
+    # CLI interface
+    current_seed = SEEDS[0]
+    is_running = True
+    while is_running:
+        print(f'Current seed = "{current_seed}"')
+        user_input = input("1. Set seed, 2. View related, 3. Check related, 4. Exit: ")
+        match user_input:
             case "1":
-                print("Current seeds: ", end="")
-                for seed in seeds:
+                print("Available seeds: ", end="")
+                for seed in SEEDS:
                     print(f'"{seed}"', end=', ')
                 print()
-                currentSeedInput = input("Set seed: ")
-                while currentSeedInput not in seeds:
-                    currentSeedInput = input("Set seed: ")
-                currentSeed = currentSeedInput
+                new_seed = input("Set seed: ")
+                while new_seed not in SEEDS:
+                    new_seed = input("Set seed: ")
+                current_seed = new_seed
             case "2":
-                for candidate in result:
-                    if candidate["seed"] != currentSeed:
+                for seed_entry in vocabulary_result:
+                    if seed_entry["seed"] != current_seed:
                         continue
-                    for relatedToken in candidate["related"]:
-                        print(f'- "{relatedToken["word"]}"')
-                    print(f"Total: {len(candidate['related'])}")
+                    for token_entry in seed_entry["related"]:
+                        print(f'- "{token_entry["word"]}"')
+                    print(f"Total related words: {len(seed_entry['related'])}")
             case "3":
-                for candidate in result:
-                    if candidate["seed"] != currentSeed:
+                for seed_entry in vocabulary_result:
+                    if seed_entry["seed"] != current_seed:
                         continue
-                    checkInput = removeSpecialsLower(input("Word want to check: ").strip())
-                    related_dict = {t["word"]: t for t in candidate["related"]}
-                    if checkInput in related_dict:
-                        obj = related_dict[checkInput]
-                        print(f"Your word is related! : {obj['word']}, depth: {obj['depth']}")
+                    word_to_check = clean_lowercase(input("Word to check: ").strip())
+                    related_dict = {t["word"]: t for t in seed_entry["related"]}
+                    if word_to_check in related_dict:
+                        word_info = related_dict[word_to_check]
+                        print(f'Your word is related! Word: "{word_info["word"]}", Depth: {word_info["depth"]}')
                     else:
-                        print("Your word is not related")
+                        print("Your word is not related.")
             case "4":
-                isRunning = False
+                is_running = False
+
     print("Goodbye!")
-
-
-
 
 if __name__ == "__main__":
     main()
